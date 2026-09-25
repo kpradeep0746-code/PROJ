@@ -15,32 +15,31 @@ import retrofit2.converter.gson.GsonConverterFactory;
  * ============================================================
  *
  * For PHYSICAL DEVICE testing:
- *   Use your computer's LAN IP address:
- *   private static final String BASE_URL = "http://192.168.1.240:5000/";
+ * Use your computer's LAN IP address:
+ * private static final String BASE_URL = "http://192.168.1.240:5000/";
  *
  * For ANDROID EMULATOR testing:
- *   Use the special loopback address that maps to the host machine:
- *   private static final String BASE_URL = "http://10.0.2.2:5000/";
+ * Use the special loopback address that maps to the host machine:
+ * private static final String BASE_URL = "http://10.0.2.2:5000/";
  *
  * For USB DEBUGGING with adb reverse:
- *   Run: adb reverse tcp:5000 tcp:5000
- *   Then use: private static final String BASE_URL = "http://127.0.0.1:5000/";
+ * Run: adb reverse tcp:5000 tcp:5000
+ * Then use: private static final String BASE_URL = "http://127.0.0.1:5000/";
  *
  * The backend Flask server must be started with:
- *   app.run(host="0.0.0.0", port=5000, debug=True)
+ * app.run(host="0.0.0.0", port=5000, debug=True)
  *
  * ============================================================
  * TIMEOUTS (set generously for AI endpoints)
  * ============================================================
  * connectTimeout : 60s
- * readTimeout    : 180s  (AI summary/timestamps can take 30-90s)
- * writeTimeout   : 60s
+ * readTimeout : 180s (AI summary/timestamps can take 30-90s)
+ * writeTimeout : 60s
  */
 public class RetrofitClient {
 
-    // ── Change this to 10.0.2.2 if using Android Emulator ─────────────────────
-    private static final String BASE_URL = "http://192.168.1.106:5000/";
-
+    // ── Live Render Cloud Backend ──────────────────────────────────────────
+    private static final String BASE_URL = "https://proj-uxe9.onrender.com/";
 
     private static volatile Retrofit retrofit;
     private static volatile ApiService apiService;
@@ -60,7 +59,10 @@ public class RetrofitClient {
         return apiService;
     }
 
-    /** Returns a singleton ApiService instance for the AI Assistant (port 8000). Thread-safe. */
+    /**
+     * Returns a singleton ApiService instance for the AI Assistant (port 8000).
+     * Thread-safe.
+     */
     public static ApiService getAiApiService() {
         if (aiApiService == null) {
             synchronized (RetrofitClient.class) {
@@ -83,7 +85,7 @@ public class RetrofitClient {
 
         OkHttpClient client = new OkHttpClient.Builder()
                 .connectTimeout(60, TimeUnit.SECONDS)
-                .readTimeout(180, TimeUnit.SECONDS)   // AI endpoints can be slow
+                .readTimeout(180, TimeUnit.SECONDS) // AI endpoints can be slow
                 .writeTimeout(60, TimeUnit.SECONDS)
                 .addInterceptor(loggingInterceptor)
                 .build();
@@ -103,7 +105,7 @@ public class RetrofitClient {
 
         OkHttpClient client = new OkHttpClient.Builder()
                 .connectTimeout(60, TimeUnit.SECONDS)
-                .readTimeout(180, TimeUnit.SECONDS)   // AI endpoints can be slow
+                .readTimeout(180, TimeUnit.SECONDS) // AI endpoints can be slow
                 .writeTimeout(60, TimeUnit.SECONDS)
                 .addInterceptor(loggingInterceptor)
                 .build();
@@ -116,8 +118,10 @@ public class RetrofitClient {
     }
 
     /**
-     * Call this if you need to change the base URL at runtime (e.g., user inputs IP).
-     * Forces the next call to getApiService() and getAiApiService() to rebuild the clients.
+     * Call this if you need to change the base URL at runtime (e.g., user inputs
+     * IP).
+     * Forces the next call to getApiService() and getAiApiService() to rebuild the
+     * clients.
      */
     public static void resetClient() {
         synchronized (RetrofitClient.class) {
