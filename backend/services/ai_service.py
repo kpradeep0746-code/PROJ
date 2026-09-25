@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from dotenv import load_dotenv
 from google import genai
 
@@ -10,7 +11,7 @@ def get_gemini_client():
     api_key = os.getenv("GEMINI_API_KEY")
 
     if not api_key:
-        raise Exception("GEMINI_API_KEY is missing. Add it in .env file.")
+        raise Exception("GEMINI_API_KEY is missing. Add it in .env file or Render environment variables.")
 
     return genai.Client(api_key=api_key)
 
@@ -18,12 +19,19 @@ def get_gemini_client():
 def ask_gemini(prompt):
     client = get_gemini_client()
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
-
-    return response.text
+    for attempt in range(4):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            return response.text
+        except Exception as e:
+            err_str = str(e)
+            if attempt < 3 and ("503" in err_str or "429" in err_str or "UNAVAILABLE" in err_str):
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise e
 
 
 def generate_summary(transcript):
@@ -72,9 +80,9 @@ def generate_timestamps(raw_transcript):
         transcript_with_time = ""
 
         for item in raw_transcript:
-            start_time = int(item["start"])
+            start_time = int(item.get("start", 0))
             time_format = seconds_to_time(start_time)
-            text = item["text"]
+            text = item.get("text", "")
 
             transcript_with_time += f"{time_format} - {text}\n"
 
