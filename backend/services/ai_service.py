@@ -127,3 +127,83 @@ Transcript:
             "success": False,
             "message": str(e)
         }
+
+
+def translate_transcript(transcript, source_language, target_language):
+    """
+    Translate transcript text using Gemini.
+
+    Args:
+        transcript (str): The original transcript text.
+        source_language (str): Source language name (e.g. "English") or "Auto Detect".
+        target_language (str): Target language name (e.g. "Telugu").
+
+    Returns:
+        dict: { "success": bool, "translated_transcript": str }
+              or { "success": False, "message": str }
+    """
+    try:
+        source_hint = (
+            "The source language is auto-detected."
+            if source_language.lower() in ("auto detect", "auto", "")
+            else f"The source language is {source_language}."
+        )
+
+        prompt = f"""You are a professional language translator.
+
+{source_hint}
+Translate the following transcript into {target_language}.
+
+Rules:
+- Translate ONLY — do not summarise, skip, or add any content.
+- Preserve every paragraph break and blank line exactly as in the original.
+- If the text contains timestamps in the format MM:SS or HH:MM:SS, keep them UNCHANGED.
+- Do not add translator notes or disclaimers.
+- Return only the translated text, nothing else.
+
+Transcript:
+{transcript}
+"""
+
+        translated = ask_gemini(prompt)
+
+        return {
+            "success": True,
+            "translated_transcript": translated
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "message": str(e)
+        }
+
+def format_transcript_with_gemini(transcript):
+    """
+    Formats raw YouTube transcript text into structured Markdown using Gemini API.
+    """
+    try:
+        prompt = f"""You are a professional lecture editor and formatter.
+
+Format the following raw, unstructured YouTube transcript into a clear, readable, and well-structured Markdown document.
+
+Rules:
+- Preserve all spoken concepts, technical terms, and meaning. Do not summarize or skip content.
+- Organize the continuous text into logical, readable paragraphs.
+- Add proper punctuation, capitalization, and minor grammar fixes.
+- Insert clean Markdown headings (e.g. ### Section Title) to structure the lecture topics.
+- Return ONLY the formatted transcript text. Do not add intro/outro preamble or explanations.
+
+Transcript:
+{transcript}
+"""
+        formatted = ask_gemini(prompt)
+        return {
+            "success": True,
+            "transcript": formatted
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": str(e)
+        }

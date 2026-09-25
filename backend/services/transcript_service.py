@@ -39,8 +39,21 @@ def get_transcript(url):
     for attempt in range(3):
         try:
             ytt_api = YouTubeTranscriptApi()
-            fetched_transcript = ytt_api.fetch(video_id)
+            transcript_list = ytt_api.list(video_id)
+            
+            try:
+                transcript = transcript_list.find_transcript(['en', 'en-US', 'en-GB'])
+            except Exception:
+                available = list(transcript_list)
+                if not available:
+                    raise Exception("No transcript available for this video.")
+                transcript = available[0]
+                try:
+                    transcript = transcript.translate('en')
+                except Exception:
+                    pass
 
+            fetched_transcript = transcript.fetch()
             raw_transcript = fetched_transcript.to_raw_data()
 
             transcript_text = ""

@@ -23,4 +23,5 @@ public class TranscriptResponse {
     public String transcript;
     public String raw_transcript; // raw_transcript from backend is a list, kept as String for optional use
     public String message; // present on error responses
+    public String warning; // present on failure responses
 }

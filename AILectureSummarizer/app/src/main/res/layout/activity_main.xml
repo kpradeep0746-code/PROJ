@@ -8,11 +8,16 @@
     android:background="@color/background">
 
     <!-- ========== MAIN CONTENT ========== -->
-    <LinearLayout
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:background="@color/background">
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="@color/background">
+
 
         <!-- TOP APP BAR -->
         <androidx.appcompat.widget.Toolbar
@@ -293,6 +298,21 @@
 
     </LinearLayout>
 
+        <!-- FLOATING CHAT BUTTON -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabChat"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="16dp"
+            android:contentDescription="Chat with AI"
+            app:srcCompat="@android:drawable/stat_notify_chat"
+            app:backgroundTint="@color/primary"
+            app:tint="@color/on_primary" />
+
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+
     <!-- ========== NAVIGATION DRAWER ========== -->
     <com.google.android.material.navigation.NavigationView
         android:id="@+id/navigationView"
@@ -308,6 +328,46 @@
             android:layout_height="match_parent"
             android:orientation="vertical"
             android:paddingTop="8dp">
+
+            <!-- Personal Notes Drawer Item -->
+            <LinearLayout
+                android:id="@+id/btnNavNotes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:paddingTop="16dp"
+                android:paddingBottom="16dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@android:drawable/ic_menu_edit"
+                    app:tint="@color/text_primary"
+                    android:layout_marginEnd="16dp"
+                    android:contentDescription="Personal Notes" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Personal Notes"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp"
+                    android:fontFamily="sans-serif-medium" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp" />
 
             <TextView
                 android:layout_width="wrap_content"

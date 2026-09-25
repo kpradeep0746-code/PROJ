@@ -1,0 +1,6 @@
+Python is a high-level, interpreted programming language known for readability.
+Core concepts:
+- Dynamic Typing
+- Automatic Memory Management (Garbage Collection)
+- Clean indentation syntax
+- Large standard library

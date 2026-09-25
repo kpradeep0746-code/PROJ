@@ -1,0 +1,7 @@
+Operating Systems manage hardware resources and provide common services for computer programs.
+Core components:
+- Kernel
+- Process Manager
+- Memory Manager
+- File System Manager
+- Device Drivers

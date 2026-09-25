@@ -13,8 +13,10 @@
     <string name="loading_video">Loading video…</string>
     
     <!-- Noa AI strings -->
+
     <string name="btn_summarize">Summarize</string>
     <string name="btn_transcript">Transcript</string>
+
     <string name="btn_study_plan">Study Plan</string>
     <string name="btn_brief_notes">Brief Notes</string>
     
@@ -44,5 +46,18 @@
     <string name="history_empty">No history yet</string>
     <string name="content_desc_logo">NOA AI Logo</string>
     <string name="content_desc_menu">Open navigation menu</string>
+    <!-- Translation support -->
+    <string-array name="translation_languages">
+        <item>English</item>
+        <item>Telugu</item>
+        <item>Hindi</item>
+        <item>Spanish</item>
+        <item>French</item>
+        <item>German</item>
+        <item>Tamil</item>
+        <item>Kannada</item>
+        <item>Malayalam</item>
+        <item>Bengali</item>
+    </string-array>
     <string name="lorem_ipsum">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</string>
 </resources>

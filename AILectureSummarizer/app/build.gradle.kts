@@ -62,4 +62,7 @@ dependencies {
 
     // Gson (explicitly declared, also included via converter-gson)
     implementation("com.google.code.gson:gson:2.10.1")
+    
+    // Markwon for Markdown rendering
+    implementation("io.noties.markwon:core:4.6.2")
 }

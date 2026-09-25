@@ -60,6 +60,14 @@
             android:theme="@style/Theme.AILectureSummarizer"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- ─── Personal Notes ─── -->
+        <activity
+            android:name=".NotesActivity"
+            android:exported="false"
+            android:label="Personal Notes"
+            android:theme="@style/Theme.AILectureSummarizer"
+            android:windowSoftInputMode="adjustResize" />
+
     </application>
 
 </manifest>

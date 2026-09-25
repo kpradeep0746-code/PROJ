@@ -1,0 +1,20 @@
+Java is an object-oriented programming language.
+
+Object-Oriented Programming has four principles:
+
+1. Encapsulation
+2. Inheritance
+3. Polymorphism
+4. Abstraction
+
+Polymorphism allows one interface to have multiple implementations.
+
+Example:
+
+Animal animal = new Dog();
+
+animal.sound();
+
+Inheritance allows one class to inherit another class.
+
+Java supports packages, interfaces and exception handling.

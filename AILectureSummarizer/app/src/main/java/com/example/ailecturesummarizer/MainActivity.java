@@ -40,6 +40,8 @@ import com.example.ailecturesummarizer.model.HistoryItem;
 import com.example.ailecturesummarizer.model.SummaryResponse;
 import com.example.ailecturesummarizer.model.TimestampResponse;
 import com.example.ailecturesummarizer.model.TranscriptResponse;
+import com.example.ailecturesummarizer.model.TranslationRequest;
+import com.example.ailecturesummarizer.model.TranslationResponse;
 import com.example.ailecturesummarizer.model.UrlRequest;
 import com.example.ailecturesummarizer.database.NoaDatabaseHelper;
 import com.google.gson.JsonObject;
@@ -115,6 +117,8 @@ public class MainActivity extends AppCompatActivity {
     private MaterialButton    btnTranscript;
     private MaterialButton    btnStudyPlan;   // Timestamps
     private MaterialButton    btnBriefNotes;  // Chat with AI
+    private com.google.android.material.floatingactionbutton.FloatingActionButton fabChat;
+
 
     // ── State ────────────────────────────────────────────────────────────────
     private YouTubePlayer     activeYouTubePlayer;
@@ -130,6 +134,9 @@ public class MainActivity extends AppCompatActivity {
     private final Handler      mainHandler = new Handler(Looper.getMainLooper());
     private Dialog             progressDialog;
     private android.widget.TextView progressMessageView;
+    private String             pendingDownloadContent = "";
+    private android.speech.tts.TextToSpeech textToSpeech;
+    private float ttsSpeedRate = 1.0f;
 
     // ─────────────────────────────────────────────────────────────────────────
     @Override
@@ -146,6 +153,12 @@ public class MainActivity extends AppCompatActivity {
         setupYouTubePlayer();
         setupUrlInput();
         setupActionButtons();
+
+        textToSpeech = new android.speech.tts.TextToSpeech(this, status -> {
+            if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                textToSpeech.setLanguage(java.util.Locale.US);
+            }
+        });
 
         // Handle back press: close drawer if open, otherwise go back
         getOnBackPressedDispatcher().addCallback(this,
@@ -172,8 +185,10 @@ public class MainActivity extends AppCompatActivity {
         btnTranscript = findViewById(R.id.btnTranscript);
         btnStudyPlan  = findViewById(R.id.btnStudyPlan);
         btnBriefNotes = findViewById(R.id.btnBriefNotes);
+        fabChat       = findViewById(R.id.fabChat);
 
         llPlayerErrorOverlay        = findViewById(R.id.llPlayerErrorOverlay);
+
         tvPlayerErrorOverlayMessage = findViewById(R.id.tvPlayerErrorOverlayMessage);
     }
 
@@ -213,6 +228,15 @@ public class MainActivity extends AppCompatActivity {
                 "Paste any YouTube URL to get started",
                 ""
         ));
+
+        // Click listener for Personal Notes navigation item
+        View btnNavNotes = findViewById(R.id.btnNavNotes);
+        if (btnNavNotes != null) {
+            btnNavNotes.setOnClickListener(v -> {
+                drawerLayout.closeDrawer(GravityCompat.START);
+                startActivity(new Intent(MainActivity.this, NotesActivity.class));
+            });
+        }
     }
 
     // ── Set user session info in Navigation Header ───────────────────────────
@@ -429,7 +453,9 @@ public class MainActivity extends AppCompatActivity {
         attachElasticTouch(btnTranscript, () -> onActionClicked("Transcript"));
         attachElasticTouch(btnStudyPlan,  () -> onActionClicked("Timestamps"));
         attachElasticTouch(btnBriefNotes, () -> onActionClicked("Chat with AI"));
+        attachElasticTouch(fabChat,       () -> onActionClicked("Chat with AI"));
     }
+
 
     private void onActionClicked(String action) {
         if (currentVideoId == null || currentUrl == null) {
@@ -509,18 +535,20 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ── Transcript → POST /api/transcript ────────────────────────────────────
+    // ── Transcript → POST /api/transcript/formatted (ai_assistant:8000) ───────
     /**
-     * Calls POST /api/transcript with { "url": currentUrl }
-     * Response: { "success": bool, "video_id": str, "transcript": str }
+     * Calls POST /api/transcript/formatted with { "url": currentUrl } on the AI
+     * assistant server (port 8000). The server fetches the raw transcript and
+     * reformats it into well-structured Markdown via the local Ollama LLM.
+     * Falls back to raw transcript automatically on the server side if LLM fails.
      */
     private void handleTranscriptAction() {
         final String url = currentUrl;
         if (url == null) return;
 
-        showLoadingDialog("Fetching Transcript...");
-        RetrofitClient.getApiService()
-                .getTranscript(new UrlRequest(url))
+        showLoadingDialog("Fetching & Structuring Transcript...\nThe AI is formatting the content.");
+        RetrofitClient.getAiApiService()
+                .getFormattedTranscript(new UrlRequest(url))
                 .enqueue(new Callback<TranscriptResponse>() {
                     @Override
                     public void onResponse(@NonNull Call<TranscriptResponse> call,
@@ -529,6 +557,12 @@ public class MainActivity extends AppCompatActivity {
                         if (response.isSuccessful() && response.body() != null) {
                             TranscriptResponse body = response.body();
                             if (body.success && !TextUtils.isEmpty(body.transcript)) {
+                                // Notify user if LLM formatting fell back to raw
+                                if (!TextUtils.isEmpty(body.warning)) {
+                                    Toast.makeText(MainActivity.this,
+                                            "⚠️ " + body.warning,
+                                            Toast.LENGTH_LONG).show();
+                                }
                                 displayContent("Lecture Transcript", body.transcript);
                             } else {
                                 String errMsg = !TextUtils.isEmpty(body.message)
@@ -603,11 +637,10 @@ public class MainActivity extends AppCompatActivity {
      */
     private void handleChatAction() {
         if (currentUrl == null) return;
-        Intent intent = new Intent(this, ChatbotActivity.class);
-        intent.putExtra(ChatbotActivity.EXTRA_VIDEO_URL,   currentUrl);
-        intent.putExtra(ChatbotActivity.EXTRA_VIDEO_TITLE, currentVideoTitle);
-        startActivity(intent);
+        ChatBottomSheetFragment chatSheet = ChatBottomSheetFragment.newInstance(currentUrl, currentVideoTitle);
+        chatSheet.show(getSupportFragmentManager(), "ChatBottomSheet");
     }
+
 
     // ── Error Helpers ────────────────────────────────────────────────────────
     private void handleHttpError(int code, String feature) {
@@ -681,16 +714,179 @@ public class MainActivity extends AppCompatActivity {
 
         TextView tvTitle   = sheet.findViewById(R.id.tvSummaryTitle);
         TextView tvContent = sheet.findViewById(R.id.tvSummaryContent);
+        View layoutTranslation = sheet.findViewById(R.id.layoutTranslation);
+        android.widget.Spinner spinnerLanguage = sheet.findViewById(R.id.spinnerLanguage);
+        MaterialButton btnTranslate = sheet.findViewById(R.id.btnTranslate);
+        android.widget.CheckBox cbShowBelow = sheet.findViewById(R.id.cbShowBelow);
+
+        io.noties.markwon.Markwon markwon = io.noties.markwon.Markwon.create(this);
 
         if (tvTitle != null)   tvTitle.setText(titleText);
         if (tvContent != null) {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                tvContent.setText(android.text.Html.fromHtml(contentHtml,
-                        android.text.Html.FROM_HTML_MODE_LEGACY));
-            } else {
-                //noinspection deprecation
-                tvContent.setText(android.text.Html.fromHtml(contentHtml));
+            markwon.setMarkdown(tvContent, contentHtml);
+        }
+
+        // Handle Translation card visibility and actions for transcripts
+        boolean isTranscript = titleText != null && titleText.toLowerCase().contains("transcript");
+        if (isTranscript && layoutTranslation != null) {
+            layoutTranslation.setVisibility(View.VISIBLE);
+
+            final String originalTranscript = contentHtml;
+            final java.util.Map<String, String> translationMap = new java.util.HashMap<>();
+            translationMap.put("English", originalTranscript);
+
+            Runnable updateContentDisplay = () -> {
+                String selectedLang = spinnerLanguage != null && spinnerLanguage.getSelectedItem() != null
+                        ? spinnerLanguage.getSelectedItem().toString() : "English";
+
+                String currentTranslation = translationMap.get(selectedLang);
+                if (currentTranslation == null) {
+                    currentTranslation = originalTranscript;
+                }
+
+                boolean showDualView = cbShowBelow != null && cbShowBelow.isChecked() && !selectedLang.equalsIgnoreCase("English");
+                String finalTextToRender;
+                if (showDualView) {
+                    finalTextToRender = "### Original Transcript\n\n" + originalTranscript
+                            + "\n\n---\n\n### Translated Transcript (" + selectedLang + ")\n\n" + currentTranslation;
+                } else {
+                    finalTextToRender = currentTranslation;
+                }
+
+                if (tvContent != null) {
+                    markwon.setMarkdown(tvContent, finalTextToRender);
+                }
+            };
+
+            if (cbShowBelow != null) {
+                cbShowBelow.setOnCheckedChangeListener((buttonView, isChecked) -> updateContentDisplay.run());
             }
+
+            if (btnTranslate != null) {
+                btnTranslate.setOnClickListener(v -> {
+                    String targetLang = spinnerLanguage != null && spinnerLanguage.getSelectedItem() != null
+                            ? spinnerLanguage.getSelectedItem().toString() : "English";
+
+                    if (targetLang.equalsIgnoreCase("English")) {
+                        updateContentDisplay.run();
+                        return;
+                    }
+
+                    if (translationMap.containsKey(targetLang)) {
+                        updateContentDisplay.run();
+                        Toast.makeText(MainActivity.this, "Loaded from cache", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    btnTranslate.setEnabled(false);
+                    btnTranslate.setText("Translating...");
+
+                    RetrofitClient.getApiService()
+                            .translateTranscript(new TranslationRequest(originalTranscript, targetLang))
+                            .enqueue(new Callback<TranslationResponse>() {
+                                @Override
+                                public void onResponse(@NonNull Call<TranslationResponse> call,
+                                                       @NonNull Response<TranslationResponse> response) {
+                                    btnTranslate.setEnabled(true);
+                                    btnTranslate.setText("Translate");
+
+                                    if (response.isSuccessful() && response.body() != null) {
+                                        TranslationResponse body = response.body();
+                                        if (body.success && !TextUtils.isEmpty(body.translatedTranscript)) {
+                                            translationMap.put(targetLang, body.translatedTranscript);
+                                            updateContentDisplay.run();
+                                            Toast.makeText(MainActivity.this, "Translation complete", Toast.LENGTH_SHORT).show();
+                                        } else {
+                                            String msg = !TextUtils.isEmpty(body.message) ? body.message : "Translation failed";
+                                            Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show();
+                                        }
+                                    } else {
+                                        handleHttpError(response.code(), "translation");
+                                    }
+                                }
+
+                                @Override
+                                public void onFailure(@NonNull Call<TranslationResponse> call,
+                                                      @NonNull Throwable t) {
+                                    btnTranslate.setEnabled(true);
+                                    btnTranslate.setText("Translate");
+                                    handleNetworkError(t);
+                                }
+                            });
+                });
+            }
+        }
+
+        View btnCopyText = sheet.findViewById(R.id.btnCopyText);
+        View btnDownload = sheet.findViewById(R.id.btnDownload);
+        View btnShareText = sheet.findViewById(R.id.btnShareText);
+        android.widget.ImageButton btnTtsPlayPause = sheet.findViewById(R.id.btnTtsPlayPause);
+        com.google.android.material.button.MaterialButton btnTtsSpeed = sheet.findViewById(R.id.btnTtsSpeed);
+
+        if (btnShareText != null) {
+            btnShareText.setOnClickListener(v -> {
+                CharSequence textToShare = (tvContent != null) ? tvContent.getText() : contentHtml;
+                Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                shareIntent.setType("text/plain");
+                shareIntent.putExtra(Intent.EXTRA_SUBJECT, titleText);
+                shareIntent.putExtra(Intent.EXTRA_TEXT, titleText + "\n\n" + textToShare.toString());
+                startActivity(Intent.createChooser(shareIntent, "Share Lecture Notes via"));
+            });
+        }
+
+        if (btnTtsPlayPause != null) {
+            btnTtsPlayPause.setOnClickListener(v -> {
+                if (textToSpeech != null && textToSpeech.isSpeaking()) {
+                    textToSpeech.stop();
+                    btnTtsPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                } else if (textToSpeech != null) {
+                    CharSequence textToSpeak = (tvContent != null) ? tvContent.getText() : contentHtml;
+                    textToSpeech.setSpeechRate(ttsSpeedRate);
+                    textToSpeech.speak(textToSpeak.toString(), android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "NOA_TTS");
+                    btnTtsPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                }
+            });
+        }
+
+        if (btnTtsSpeed != null) {
+            btnTtsSpeed.setOnClickListener(v -> {
+                if (ttsSpeedRate == 1.0f) ttsSpeedRate = 1.25f;
+                else if (ttsSpeedRate == 1.25f) ttsSpeedRate = 1.5f;
+                else ttsSpeedRate = 1.0f;
+                btnTtsSpeed.setText(String.format(java.util.Locale.US, "%.2fx", ttsSpeedRate));
+                if (textToSpeech != null && textToSpeech.isSpeaking()) {
+                    textToSpeech.setSpeechRate(ttsSpeedRate);
+                }
+            });
+        }
+
+        dialog.setOnDismissListener(d -> {
+            if (textToSpeech != null && textToSpeech.isSpeaking()) {
+                textToSpeech.stop();
+            }
+        });
+
+        if (btnCopyText != null) {
+            btnCopyText.setOnClickListener(v -> {
+                android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                CharSequence textToCopy = (tvContent != null) ? tvContent.getText() : contentHtml;
+                android.content.ClipData clip = android.content.ClipData.newPlainText("NOA Summary", textToCopy);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(MainActivity.this, "Copied to clipboard", Toast.LENGTH_SHORT).show();
+            });
+        }
+
+        if (btnDownload != null) {
+            btnDownload.setOnClickListener(v -> {
+                CharSequence textToSave = (tvContent != null) ? tvContent.getText() : contentHtml;
+                pendingDownloadContent = titleText + "\n\n" + textToSave.toString();
+                Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("text/plain");
+                String safeName = titleText.replaceAll("[^a-zA-Z0-9]", "_") + ".txt";
+                intent.putExtra(Intent.EXTRA_TITLE, safeName);
+                startActivityForResult(intent, 1001);
+            });
         }
 
         dialog.setContentView(sheet);
@@ -770,7 +966,15 @@ public class MainActivity extends AppCompatActivity {
         btnTranscript.setEnabled(enabled);
         btnStudyPlan.setEnabled(enabled);
         btnBriefNotes.setEnabled(enabled);
+        if (fabChat != null) {
+            if (locked) {
+                fabChat.hide();
+            } else {
+                fabChat.show();
+            }
+        }
     }
+
 
     private void animateButtonAlpha(float from, float to) {
         ValueAnimator animator = ValueAnimator.ofFloat(from, to);
@@ -784,6 +988,23 @@ public class MainActivity extends AppCompatActivity {
             btnBriefNotes.setAlpha(alpha);
         });
         animator.start();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @androidx.annotation.Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 1001 && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            try {
+                java.io.OutputStream os = getContentResolver().openOutputStream(data.getData());
+                if (os != null) {
+                    os.write(pendingDownloadContent.getBytes());
+                    os.close();
+                    Toast.makeText(this, "Saved successfully!", Toast.LENGTH_SHORT).show();
+                }
+            } catch (Exception e) {
+                Toast.makeText(this, "Failed to save: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        }
     }
 
     // ── Elastic Touch Micro-Interaction ──────────────────────────────────────
@@ -828,22 +1049,19 @@ public class MainActivity extends AppCompatActivity {
      *   - Raw 11-character ID
      */
     public static String extractVideoId(String youtubeUrl) {
-        if (TextUtils.isEmpty(youtubeUrl)) return null;
+        if (youtubeUrl == null || youtubeUrl.trim().isEmpty()) return null;
 
         String trimmed = youtubeUrl.trim();
 
         // Plain 11-char video ID
-        if (trimmed.matches("[a-zA-Z0-9_-]{11}")) return trimmed;
+        if (trimmed.matches("^[a-zA-Z0-9_-]{11}$")) return trimmed;
 
-        // Standard URL patterns
-        String pattern = "(?<=watch\\?v=|/videos/|/embed/|/shorts/|/live/|youtu\\.be/)[a-zA-Z0-9_-]{11}";
-        @SuppressWarnings("RegExpRedundantEscape")
-        Matcher m = Pattern.compile(pattern).matcher(trimmed);
-        if (m.find()) return m.group();
-
-        // Fallback
-        m = Pattern.compile("(?:v=|/)([a-zA-Z0-9_-]{11})").matcher(trimmed);
-        if (m.find()) return m.group(1);
+        // Ensure URL contains youtube domain
+        if (trimmed.toLowerCase().contains("youtube.com") || trimmed.toLowerCase().contains("youtu.be")) {
+            String pattern = "(?:watch\\?v=|/videos/|/embed/|/shorts/|/live/|youtu\\.be/|v=)([a-zA-Z0-9_-]{11})";
+            Matcher m = Pattern.compile(pattern, Pattern.CASE_INSENSITIVE).matcher(trimmed);
+            if (m.find()) return m.group(1);
+        }
 
         return null;
     }
@@ -852,6 +1070,10 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (textToSpeech != null) {
+            textToSpeech.stop();
+            textToSpeech.shutdown();
+        }
         super.onDestroy();
         executorService.shutdown();
         if (progressDialog != null && progressDialog.isShowing()) {
