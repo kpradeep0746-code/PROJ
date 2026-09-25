@@ -2,6 +2,7 @@ import os
 import json
 from dotenv import load_dotenv
 from google import genai
+import yt_dlp
 
 load_dotenv()
 
@@ -33,12 +34,31 @@ def ask_gemini_stream(prompt: str):
             yield chunk.text
 
 
-def generate_summary(transcript: str):
+def get_video_metadata(url: str):
     try:
+        ydl_opts = {"skip_download": True, "quiet": True, "no_warnings": True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return {
+                "title": info.get("title", ""),
+                "description": (info.get("description") or "")[:2000],
+                "channel": info.get("uploader", "")
+            }
+    except Exception:
+        return {}
+
+
+def generate_summary(transcript: str, url: str = None):
+    try:
+        extra_ctx = ""
+        if (not transcript or len(transcript.strip()) < 50) and url:
+            meta = get_video_metadata(url)
+            extra_ctx = f"Video URL: {url}\nTitle: {meta.get('title')}\nDescription: {meta.get('description')}\n"
+
         prompt = f"""
 You are an expert study notes creator and lecture summarizer.
 
-Create clear, concise, and structured study notes from the following YouTube lecture transcript.
+Create clear, concise, and structured study notes from the following YouTube lecture.
 
 Rules:
 - Use simple, easy-to-understand English.
@@ -48,7 +68,8 @@ Rules:
 - Keep it highly practical and useful for students.
 - Do NOT repeat points or include filler content.
 
-Transcript:
+{extra_ctx}
+Transcript / Content:
 {transcript}
 """
         summary = ask_gemini(prompt)
@@ -70,22 +91,27 @@ def seconds_to_time(seconds):
     return f"{minutes:02d}:{seconds:02d}"
 
 
-def generate_timestamps(raw_transcript):
+def generate_timestamps(raw_transcript, url: str = None):
     try:
         transcript_with_time = ""
-        for item in raw_transcript[:250]:  # Limit to avoid huge prompt payloads
-            start_time = int(item.get("start", 0))
-            time_format = seconds_to_time(start_time)
-            text = item.get("text", "")
-            transcript_with_time += f"{time_format} - {text}\n"
+        if raw_transcript:
+            for item in raw_transcript[:250]:
+                start_time = int(item.get("start", 0))
+                time_format = seconds_to_time(start_time)
+                text = item.get("text", "")
+                transcript_with_time += f"{time_format} - {text}\n"
+
+        extra_ctx = ""
+        if not transcript_with_time.strip() and url:
+            meta = get_video_metadata(url)
+            extra_ctx = f"Video URL: {url}\nTitle: {meta.get('title')}\nDescription: {meta.get('description')}\n"
 
         prompt = f"""
 You are a YouTube lecture timestamp generator.
 
-Create key topic-wise timestamps from this transcript.
+Create key topic-wise timestamps from this transcript or video info.
 
 Rules:
-- Use only the actual timestamp markers present in the transcript.
 - Group related content into meaningful lecture topics.
 - Keep topic names concise, informative, and relevant (3-7 words each).
 - Return strictly a valid JSON array of objects with "time" and "topic" keys.
@@ -99,6 +125,7 @@ JSON Format:
   }}
 ]
 
+{extra_ctx}
 Transcript:
 {transcript_with_time}
 """
@@ -159,9 +186,14 @@ Text:
         }
 
 
-def format_transcript_with_gemini(transcript: str):
+def format_transcript_with_gemini(transcript: str, url: str = None):
     """Formats raw transcript text into structured Markdown."""
     try:
+        extra_ctx = ""
+        if (not transcript or len(transcript.strip()) < 50) and url:
+            meta = get_video_metadata(url)
+            extra_ctx = f"Video: {meta.get('title')}\n"
+
         prompt = f"""You are a professional lecture editor and formatter.
 
 Format the following raw, unstructured YouTube transcript into a clear, readable, and well-structured Markdown document.
@@ -173,6 +205,7 @@ Rules:
 - Insert clean Markdown headings (e.g. ### Section Title) to structure the lecture topics.
 - Return ONLY the formatted transcript text. Do not add intro/outro preamble or explanations.
 
+{extra_ctx}
 Transcript:
 {transcript}
 """

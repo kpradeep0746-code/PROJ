@@ -98,22 +98,21 @@ def summary_api():
         }), 400
 
     transcript_result = get_transcript(url)
+    transcript_text = transcript_result.get("transcript", "") if transcript_result.get("success") else ""
+    video_id = transcript_result.get("video_id") or ""
 
-    if transcript_result.get("success") is not True:
-        return jsonify(transcript_result), 200
-
-    summary_result = generate_summary(transcript_result["transcript"])
+    summary_result = generate_summary(transcript_text, url=url)
 
     if summary_result.get("success") is not True:
         return jsonify({
             "success": False,
-            "video_id": transcript_result.get("video_id"),
+            "video_id": video_id,
             "message": summary_result.get("message")
         }), 200
 
     return jsonify({
         "success": True,
-        "video_id": transcript_result.get("video_id"),
+        "video_id": video_id,
         "summary": summary_result.get("summary")
     })
 
@@ -131,22 +130,21 @@ def timestamps_api():
         }), 400
 
     transcript_result = get_transcript(url)
+    raw_transcript = transcript_result.get("raw_transcript", []) if transcript_result.get("success") else []
+    video_id = transcript_result.get("video_id") or ""
 
-    if transcript_result.get("success") is not True:
-        return jsonify(transcript_result), 200
-
-    timestamp_result = generate_timestamps(transcript_result.get("raw_transcript", []))
+    timestamp_result = generate_timestamps(raw_transcript, url=url)
 
     if timestamp_result.get("success") is not True:
         return jsonify({
             "success": False,
-            "video_id": transcript_result.get("video_id"),
+            "video_id": video_id,
             "message": timestamp_result.get("message")
         }), 200
 
     return jsonify({
         "success": True,
-        "video_id": transcript_result.get("video_id"),
+        "video_id": video_id,
         "timestamps": timestamp_result.get("timestamps")
     })
 
@@ -164,21 +162,22 @@ def analyze_api():
         }), 400
 
     transcript_result = get_transcript(url)
+    transcript_text = transcript_result.get("transcript", "") if transcript_result.get("success") else ""
+    raw_transcript = transcript_result.get("raw_transcript", []) if transcript_result.get("success") else []
+    video_id = transcript_result.get("video_id") or ""
 
-    if transcript_result.get("success") is not True:
-        return jsonify(transcript_result), 200
-
-    summary_result = generate_summary(transcript_result["transcript"])
-    timestamp_result = generate_timestamps(transcript_result.get("raw_transcript", []))
+    summary_result = generate_summary(transcript_text, url=url)
+    timestamp_result = generate_timestamps(raw_transcript, url=url)
 
     return jsonify({
         "success": summary_result.get("success") is True and timestamp_result.get("success") is True,
-        "video_id": transcript_result.get("video_id"),
+        "video_id": video_id,
         "summary": summary_result.get("summary"),
         "timestamps": timestamp_result.get("timestamps"),
         "summary_error": summary_result.get("message"),
         "timestamps_error": timestamp_result.get("message")
     })
+
 
 
 # ── Translation ──────────────────────────────────────────────────────────────
